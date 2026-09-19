@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WebExtension Anatomy — Glossary</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main class="page">
+  <p class="eyebrow">Reference</p>
+  <h1>WebExtension Anatomy — Glossary</h1>
+  <p class="dek">The components an extension can be built from, and the <code>manifest.json</code> key that wires each one in. Compressed from <a href="../lessons/0001-anatomy-of-a-webextension.html">Lesson 1</a> for quick lookup later.</p>
+
+  <div class="crosslinks">
+    <a href="../MISSION.md">Mission</a>
+    <a href="../lessons/0001-anatomy-of-a-webextension.html">Lesson 1: Anatomy of a WebExtension</a>
+    <a href="../lessons/0002-background-permissions-popup-options.html">Lesson 2: Background, permissions, popup &amp; options</a>
+    <a href="../lessons/0003-content-scripts.html">Lesson 3: Content scripts</a>
+    <a href="./messaging-and-storage-patterns.html">Reference: Messaging &amp; storage patterns</a>
+    <a href="./content-scripts-cheatsheet.html">Reference: Content scripts cheat sheet</a>
+  </div>
+
+  <table>
+    <thead>
+      <tr><th>Component</th><th>What it is</th><th>manifest.json key</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>manifest.json</code></td>
+        <td>The one required file. Holds name, version, permissions, and pointers to every other component below.</td>
+        <td>— (it <em>is</em> the manifest)</td>
+      </tr>
+      <tr>
+        <td>Background script</td>
+        <td>Runs independently of any web page. Listens for browser-level events (new tab, clicked icon, installed). Non-persistent (unloads when idle) by default in Manifest V3; persistent pages were Manifest&nbsp;V2-only.</td>
+        <td><code>background</code></td>
+      </tr>
+      <tr>
+        <td>Content script</td>
+        <td>Runs inside a live web page's DOM — separate world from the page's own scripts. Can read/modify the DOM, inject CSS, and message the background script for full API access.</td>
+        <td><code>content_scripts</code></td>
+      </tr>
+      <tr>
+        <td>Popup</td>
+        <td>Small HTML page shown when the user clicks the toolbar/address-bar button. Closes when focus leaves it. Has full extension-API access.</td>
+        <td><code>action.default_popup</code></td>
+      </tr>
+      <tr>
+        <td>Sidebar</td>
+        <td>HTML page pinned in the browser's left pane, alongside the page content. Stays open across navigation.</td>
+        <td><code>sidebar_action</code></td>
+      </tr>
+      <tr>
+        <td>Options page</td>
+        <td>HTML page shown inside the browser's native add-ons/extensions manager when the user opens this extension's settings.</td>
+        <td><code>options_ui</code></td>
+      </tr>
+      <tr>
+        <td>Extension page</td>
+        <td>Any other HTML page with full API access, not tied to a predefined UI slot. Opened manually via <code>tabs.create()</code> / <code>windows.create()</code>.</td>
+        <td>none required</td>
+      </tr>
+      <tr>
+        <td>Web accessible resource</td>
+        <td>A packaged file (image, CSS, JS, HTML) exposed so content scripts / page scripts can load it by URL — e.g. an icon a content script inserts into the page.</td>
+        <td><code>web_accessible_resources</code></td>
+      </tr>
+      <tr>
+        <td>Icons</td>
+        <td>Images representing the extension itself and any toolbar buttons it defines.</td>
+        <td><code>icons</code></td>
+      </tr>
+      <tr>
+        <td>Permissions</td>
+        <td>Declared capabilities (host access, APIs) the extension is requesting. Gates which WebExtensions APIs are usable from background/content scripts.</td>
+        <td><code>permissions</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>The two worlds</h2>
+  <blockquote class="definition">
+    <p><strong>Privileged (extension) context</strong> — background scripts, popups, sidebars, options pages, extension pages. Full access to WebExtensions APIs (<code>tabs</code>, <code>storage</code>, etc.) as declared in <code>permissions</code>.</p>
+  </blockquote>
+  <blockquote class="definition">
+    <p><strong>Page context</strong> — content scripts. Live inside a real web page's DOM, but in an isolated JS world from the page's own scripts. Can use only a small subset of WebExtensions APIs directly, and must message the background script for the rest.</p>
+  </blockquote>
+
+  <p class="sources">Source: <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Anatomy_of_a_WebExtension">MDN — Anatomy of a WebExtension</a> and its linked component pages.</p>
+</main>
+</body>
+</html>

@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Content Scripts — Cheat Sheet</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main class="page">
+  <p class="eyebrow">Reference</p>
+  <h1>Content Scripts — Cheat Sheet</h1>
+  <p class="dek">Registration syntax, the isolated-world rules, and exactly which APIs a content script can touch directly. Compressed from <a href="../lessons/0003-content-scripts.html">Lesson 3</a>.</p>
+
+  <div class="crosslinks">
+    <a href="../MISSION.md">Mission</a>
+    <a href="./webextension-anatomy-glossary.html">Reference: Anatomy glossary</a>
+    <a href="./messaging-and-storage-patterns.html">Reference: Messaging &amp; storage patterns</a>
+    <a href="../lessons/0003-content-scripts.html">Lesson 3: Content scripts</a>
+  </div>
+
+  <h2>Registering one</h2>
+  <pre><code>"content_scripts": [
+  {
+    "matches": ["*://*.mozilla.org/*"],
+    "js": ["content-script.js"],
+    "css": ["styles.css"],
+    "run_at": "document_idle",
+    "all_frames": false
+  }
+]</code></pre>
+  <table>
+    <thead><tr><th>Key</th><th>Controls</th></tr></thead>
+    <tbody>
+      <tr><td><code>matches</code></td><td>Which URLs (as <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Match_patterns">match patterns</a>) trigger auto-injection. Required.</td></tr>
+      <tr><td><code>js</code> / <code>css</code></td><td>Files to inject. Either or both.</td></tr>
+      <tr><td><code>run_at</code></td><td><code>document_start</code> (before DOM built), <code>document_end</code> (DOM built, resources may still load), <code>document_idle</code> (default — page mostly settled).</td></tr>
+      <tr><td><code>all_frames</code></td><td>Inject into every iframe (<code>true</code>) or just the top frame (<code>false</code>, default).</td></tr>
+    </tbody>
+  </table>
+  <p>A statically declared <code>content_scripts</code> entry needs no separate <code>host_permissions</code> — <code>matches</code> <em>is</em> the grant. (Dynamic injection via <code>scripting.executeScript()</code> is different: that needs <code>activeTab</code> or explicit host permissions.)</p>
+
+  <h2>The isolated world</h2>
+  <blockquote class="definition">
+    <p>A content script shares the page's live DOM but not its JS. It can read/write elements the page created, but <code>window.someVarThePageSet</code> is invisible to it, and vice versa — each gets its own global scope layered over the same document.<sup class="cite"><a href="#fn1">[1]</a></sup></p>
+  </blockquote>
+  <p>Reloading the page re-injects the content script from scratch — nothing in its top-level scope survives navigation. Treat it as stateless; persist anything that matters via <code>storage</code> or a message to the background script.</p>
+
+  <h2>APIs available directly (no messaging needed)</h2>
+  <table>
+    <thead><tr><th>Namespace</th><th>What's available</th></tr></thead>
+    <tbody>
+      <tr><td><code>storage</code></td><td>Everything — <code>get</code>/<code>set</code>/<code>remove</code>, full access.</td></tr>
+      <tr><td><code>runtime</code></td><td><code>sendMessage()</code>, <code>connect()</code>, <code>onMessage</code>, <code>onConnect</code>, <code>getURL()</code>, <code>getManifest()</code>.</td></tr>
+      <tr><td><code>i18n</code></td><td><code>getMessage()</code>, <code>getUILanguage()</code>, <code>detectLanguage()</code>.</td></tr>
+      <tr><td><code>extension</code></td><td><code>getURL()</code>, <code>inIncognitoContext</code>.</td></tr>
+    </tbody>
+  </table>
+  <p>Everything else — <code>tabs</code>, <code>notifications</code>, <code>cookies</code>, <code>bookmarks</code>, etc. — is <strong>not</strong> reachable from a content script. Message the background script and have it call the API.<sup class="cite"><a href="#fn2">[2]</a></sup></p>
+
+  <h2>Talking to the background script</h2>
+  <pre><code>// content script
+browser.runtime.sendMessage({ type: "link-clicked", url: link.href });
+
+// background script — top-level, synchronous
+browser.runtime.onMessage.addListener((message) => { /* ... */ });</code></pre>
+  <p>Background → content script (needs a specific tab):</p>
+  <pre><code>browser.tabs.sendMessage(tabId, { type: "hello" });</code></pre>
+
+  <h2>Talking to the page's own scripts</h2>
+  <p>Not via <code>runtime</code> messaging — use <code>window.postMessage</code> on both sides, and always check <code>event.source === window</code> before trusting anything (the page is untrusted input):</p>
+  <pre><code>// content script, listening
+window.addEventListener("message", (event) => {
+  if (event.source !== window) return;
+  // handle event.data
+});</code></pre>
+
+  <h2>Where content scripts can't run</h2>
+  <p>Browser UI (<code>about:*</code> pages, the PDF viewer), and a short list of sensitive domains including <code>addons.mozilla.org</code> and <code>accounts.firefox.com</code>. If a content script seems to silently not fire, check the URL against this before debugging the code.<sup class="cite"><a href="#fn3">[3]</a></sup></p>
+
+  <div class="sources">
+    <p><strong>Notes &amp; sources</strong></p>
+    <ol>
+      <li id="fn1">MDN, <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Content_scripts">Content scripts</a> — isolated world / DOM sharing.</li>
+      <li id="fn2">MDN, <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Content_scripts#webextension_apis">Content scripts — APIs available</a>.</li>
+      <li id="fn3">MDN, <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Content_scripts#restricted_domains">Content scripts — restricted domains</a>.</li>
+    </ol>
+  </div>
+</main>
+</body>
+</html>

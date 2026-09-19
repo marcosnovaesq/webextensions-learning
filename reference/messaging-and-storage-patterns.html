@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Messaging &amp; Storage Patterns — Reference</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main class="page">
+  <p class="eyebrow">Reference</p>
+  <h1>Messaging &amp; Storage Patterns</h1>
+  <p class="dek">The connective tissue between background scripts, popups, and options pages. Compressed from <a href="../lessons/0002-background-permissions-popup-options.html">Lesson 2</a>.</p>
+
+  <div class="crosslinks">
+    <a href="../MISSION.md">Mission</a>
+    <a href="./webextension-anatomy-glossary.html">Reference: Anatomy glossary</a>
+    <a href="../lessons/0002-background-permissions-popup-options.html">Lesson 2: Background, permissions, popup, options</a>
+  </div>
+
+  <h2>Ask the background script for something</h2>
+  <p>From a popup, options page, or content script:</p>
+  <pre><code>const answer = await browser.runtime.sendMessage({ type: "some-request" });</code></pre>
+
+  <p>In the background script — register it <strong>top-level and synchronously</strong>, never inside a callback, or it won't survive the script unloading and reloading:</p>
+  <pre><code>browser.runtime.onMessage.addListener((message) => {
+  if (message.type === "some-request") {
+    return Promise.resolve("some answer"); // returning a Promise = async reply
+  }
+});</code></pre>
+
+  <h2>Persist a setting</h2>
+  <p>Prefer <code>storage.sync</code> for user settings (syncs across the user's devices) over <code>storage.local</code>. Never hold state in a plain JS variable in a background script — Manifest V3 background scripts are non-persistent and can unload between events, wiping globals.<sup class="cite"><a href="#fn1">[1]</a></sup></p>
+  <pre><code>// write
+await browser.storage.sync.set({ greeting: "Hello!" });
+
+// read, with a default if nothing's saved yet
+const { greeting } = await browser.storage.sync.get({ greeting: "Hello!" });</code></pre>
+
+  <h2>Open the options page from code</h2>
+  <pre><code>browser.runtime.openOptionsPage();</code></pre>
+  <p>Works from a background script, popup, or any extension page. There's no equivalent for opening a <em>popup</em> programmatically — popups only open in response to the user clicking the toolbar button.<sup class="cite"><a href="#fn2">[2]</a></sup></p>
+
+  <h2>Permissions these patterns need</h2>
+  <table>
+    <thead><tr><th>API used</th><th>Permission string</th></tr></thead>
+    <tbody>
+      <tr><td><code>browser.storage.*</code></td><td><code>"storage"</code></td></tr>
+      <tr><td><code>browser.tabs.*</code> (most methods)</td><td><code>"tabs"</code></td></tr>
+      <tr><td>Any URL-based access (host_permissions, MV3)</td><td>match pattern, e.g. <code>"*://example.com/*"</code></td></tr>
+    </tbody>
+  </table>
+  <p><code>runtime.sendMessage</code>, <code>runtime.onMessage</code>, and <code>runtime.openOptionsPage</code> need no permission — <code>runtime</code> is always available.</p>
+
+  <div class="sources">
+    <p><strong>Notes &amp; sources</strong></p>
+    <ol>
+      <li id="fn1">MDN, <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Background_scripts">Background scripts</a> — event pages must use the storage API instead of globals, and register listeners synchronously at the top level.</li>
+      <li id="fn2">MDN, <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/user_interface/Popups">Popups</a> — a popup cannot be opened programmatically, only via user action.</li>
+    </ol>
+  </div>
+</main>
+</body>
+</html>

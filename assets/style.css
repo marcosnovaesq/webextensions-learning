@@ -1,0 +1,245 @@
+/* Shared stylesheet for the WebExtensions teaching workspace.
+   Tufte-influenced: generous whitespace, serif body text, sparing color,
+   numbered footnotes for citations, and print-friendly by default. */
+
+:root {
+  --bg: #fbfaf7;
+  --bg-raised: #f2f0ea;
+  --ink: #1b1a17;
+  --ink-soft: #55524a;
+  --rule: #dcd8cd;
+  --accent: #8a3b2b;
+  --accent-soft: #c98d3a;
+  --good: #2f6e4e;
+  --bad: #a83232;
+  --code-bg: #eeeae0;
+  --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+  --font-sans: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #171613;
+    --bg-raised: #201f1b;
+    --ink: #e9e5da;
+    --ink-soft: #b3ada0;
+    --rule: #3a382f;
+    --accent: #e0947a;
+    --accent-soft: #e3b567;
+    --good: #6fbf94;
+    --bad: #e08080;
+    --code-bg: #24221d;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { background: var(--bg); }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 19px;
+  line-height: 1.6;
+}
+
+.page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 4rem 1.5rem 6rem;
+}
+
+.eyebrow {
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+h1 {
+  font-size: 2.15rem;
+  line-height: 1.2;
+  margin: 0.35rem 0 0.25rem;
+}
+
+h2 {
+  font-size: 1.4rem;
+  margin-top: 3rem;
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 0.3rem;
+}
+
+h3 {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  margin-top: 2rem;
+}
+
+p, li { max-width: 68ch; }
+
+.dek {
+  font-family: var(--font-sans);
+  color: var(--ink-soft);
+  font-size: 1.05rem;
+  margin-bottom: 2.2rem;
+}
+
+a { color: var(--accent); text-decoration-color: var(--rule); }
+a:hover { text-decoration-color: var(--accent); }
+
+code, .k {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--code-bg);
+  padding: 0.08em 0.35em;
+  border-radius: 3px;
+}
+
+pre {
+  background: var(--code-bg);
+  padding: 1rem 1.1rem;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+pre code { background: none; padding: 0; }
+
+blockquote.definition {
+  font-family: var(--font-sans);
+  margin: 1.5rem 0;
+  padding: 0.9rem 1.2rem;
+  border-left: 3px solid var(--accent-soft);
+  background: var(--bg-raised);
+  border-radius: 0 4px 4px 0;
+}
+blockquote.definition p { margin: 0; }
+blockquote.definition strong { color: var(--accent); }
+
+hr.rule {
+  border: none;
+  border-top: 1px solid var(--rule);
+  margin: 3rem 0;
+}
+
+/* footnote-style citations */
+sup.cite a {
+  text-decoration: none;
+  font-family: var(--font-sans);
+}
+.sources {
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+.sources ol { padding-left: 1.2rem; }
+.sources li { margin-bottom: 0.4rem; }
+
+/* nav links between lessons/reference/mission */
+.crosslinks {
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  display: flex;
+  gap: 1.2rem;
+  flex-wrap: wrap;
+  margin-bottom: 2.5rem;
+}
+.crosslinks a { color: var(--ink-soft); }
+
+.ask-agent {
+  font-family: var(--font-sans);
+  font-size: 0.92rem;
+  margin-top: 3.5rem;
+  padding: 1rem 1.2rem;
+  background: var(--bg-raised);
+  border-radius: 6px;
+  color: var(--ink-soft);
+}
+.ask-agent strong { color: var(--ink); }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-sans);
+  font-size: 0.92rem;
+  margin: 1.2rem 0;
+}
+th, td {
+  text-align: left;
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+th { color: var(--ink-soft); font-weight: 600; }
+
+/* quiz widget (see quiz.js) */
+.quiz {
+  font-family: var(--font-sans);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 1.3rem 1.4rem;
+  margin: 1.4rem 0;
+  background: var(--bg-raised);
+}
+.quiz-progress {
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  letter-spacing: 0.04em;
+  margin-bottom: 0.6rem;
+}
+.quiz-prompt {
+  font-size: 1.02rem;
+  margin-bottom: 0.9rem;
+  color: var(--ink);
+}
+.quiz-options {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.quiz-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+  cursor: pointer;
+}
+.quiz-option:hover:not(:disabled) { border-color: var(--accent-soft); }
+.quiz-option:disabled { cursor: default; }
+.quiz-option.correct { border-color: var(--good); background: color-mix(in srgb, var(--good) 12%, var(--bg)); }
+.quiz-option.incorrect { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, var(--bg)); }
+.quiz-feedback {
+  font-size: 0.88rem;
+  margin-top: 0.7rem;
+  min-height: 1.2em;
+}
+.quiz-feedback.correct { color: var(--good); }
+.quiz-feedback.incorrect { color: var(--bad); }
+.quiz-score {
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+  margin-top: 0.8rem;
+}
+
+@media print {
+  body { font-size: 12pt; }
+  .ask-agent { display: none; }
+  a { color: var(--ink); }
+}

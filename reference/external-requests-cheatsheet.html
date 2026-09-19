@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>External Requests — Cheat Sheet</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main class="page">
+  <p class="eyebrow">Reference</p>
+  <h1>External Requests — Cheat Sheet</h1>
+  <p class="dek">Who's allowed to fetch what, and the one gotcha that catches everyone. Compressed from <a href="../lessons/0004-talking-to-external-servers.html">Lesson 4</a>.</p>
+
+  <div class="crosslinks">
+    <a href="../MISSION.md">Mission</a>
+    <a href="./content-scripts-cheatsheet.html">Reference: Content scripts cheat sheet</a>
+    <a href="../lessons/0004-talking-to-external-servers.html">Lesson 4: Talking to external servers</a>
+  </div>
+
+  <h2>Where does the fetch get its privilege?</h2>
+  <table>
+    <thead><tr><th>Context</th><th>host_permissions gets you...</th></tr></thead>
+    <tbody>
+      <tr><td>Background script</td><td>Fetch/XHR to matching origins, no CORS involved at all.</td></tr>
+      <tr><td>Popup / options page</td><td>Same as background — any extension page is privileged.</td></tr>
+      <tr><td>Content script (MV3)</td><td>Nothing extra — follows the host page's own CORS policy.<sup class="cite"><a href="#fn1">[1]</a></sup></td></tr>
+    </tbody>
+  </table>
+  <p>Rule of thumb: if a network call needs to reach somewhere the page itself couldn't, do it in the background script and message the result over, exactly like <a href="./content-scripts-cheatsheet.html">Lesson 3's</a> rule for <code>tabs</code> and other restricted APIs.</p>
+
+  <h2>Declaring the permission</h2>
+  <pre><code>"host_permissions": ["https://api.example.com/*"]</code></pre>
+  <p>Match pattern, same syntax as a content script's <code>matches</code>. Narrow it to the real domain — a wildcard like <code>*://*/*</code> here is a much bigger grant than the equivalent in <code>content_scripts</code>, since it applies to genuinely unrestricted cross-origin requests, not just injection.</p>
+
+  <h2>The fetch error-handling gotcha</h2>
+  <p><code>fetch()</code> rejects only on a network-level failure. An HTTP error status resolves normally — check <code>response.ok</code> yourself:<sup class="cite"><a href="#fn2">[2]</a></sup></p>
+  <pre><code>const response = await fetch(url);
+if (!response.ok) {
+  throw new Error(`Request failed: ${response.status}`);
+}
+const data = await response.json();</code></pre>
+  <p>Thrown inside a <code>browser.runtime.onMessage</code> listener, this becomes a rejected promise for whoever called <code>sendMessage()</code> — wrap that call site in <code>try</code>/<code>catch</code> too.</p>
+
+  <h2>Storing what comes back</h2>
+  <p><code>storage.local</code>/<code>storage.sync</code> are ordinary browser storage — fine for caching a public response, not an encrypted vault for a real credential. See <a href="../lessons/0004-talking-to-external-servers.html">Lesson 4</a>.</p>
+
+  <h2>When the API needs to know who you are</h2>
+  <p>Public, unauthenticated APIs: just fetch. A service that needs a specific logged-in user's authorization (Google, GitHub, etc.): that's the <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/identity">identity API</a> — <code>identity.launchWebAuthFlow()</code> plus <code>identity.getRedirectURL()</code> as the OAuth2 callback. Not covered hands-on yet.</p>
+
+  <div class="sources">
+    <p><strong>Notes &amp; sources</strong></p>
+    <ol>
+      <li id="fn1">MDN, <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Content_scripts#xhr_and_fetch">Content scripts — XHR and fetch</a> — MV3 content scripts follow the host page's CORS policy.</li>
+      <li id="fn2">MDN, <a href="https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch">Using Fetch</a> — the promise rejects only on network failure, not on an HTTP error status.</li>
+    </ol>
+  </div>
+</main>
+</body>
+</html>

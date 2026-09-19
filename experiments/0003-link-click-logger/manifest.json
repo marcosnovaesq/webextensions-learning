@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "link-click-logger (learning experiment)",
+  "version": "0.1",
+  "description": "Lesson 3 experiment: content script -> background -> storage -> popup.",
+  "action": {
+    "default_popup": "popup/popup.html"
+  },
+  "permissions": ["storage"],
+  "background": {
+    "scripts": ["background.js"],
+    "type": "module"
+  },
+  "content_scripts":[ 
+    {
+      "matches": ["*://*/*"],
+      "js": ["content-script.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

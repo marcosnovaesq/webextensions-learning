@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 3 — Content Scripts</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main class="page">
+
+  <p class="eyebrow">Lesson 3 · WebExtensions</p>
+  <h1>Content Scripts</h1>
+  <p class="dek">The last unbuilt piece from <a href="./0001-anatomy-of-a-webextension.html">Lesson 1's map</a> — the only component that actually reaches into a real web page. Today: what "isolated world" really means, which APIs you get for free versus which need a message, and a content script that reports real clicks back through the storage-and-popup pattern from <a href="./0002-background-permissions-popup-options.html">Lesson 2</a>.</p>
+
+  <div class="crosslinks">
+    <a href="../MISSION.md">Mission</a>
+    <a href="./0001-anatomy-of-a-webextension.html">Lesson 1</a>
+    <a href="./0002-background-permissions-popup-options.html">Lesson 2</a>
+    <a href="../reference/content-scripts-cheatsheet.html">Reference: Content scripts cheat sheet</a>
+  </div>
+
+  <blockquote class="definition">
+    <p><strong>Primary source for this lesson:</strong> <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Content_scripts">MDN — Content scripts</a>.</p>
+  </blockquote>
+
+  <h2>The isolated world</h2>
+
+  <p>A content script shares the page's live DOM — it can read and modify exactly what's on screen, same as the page's own scripts — but it does <em>not</em> share the page's JavaScript. Each gets its own separate global scope layered over the same document.<sup class="cite"><a href="#fn1">[1]</a></sup></p>
+
+  <pre><code>// page-script.js (the site's own code)
+window.foo = "from page";
+
+// content-script.js (your extension's code, same page)
+console.log(window.foo); // undefined — different world entirely</code></pre>
+
+  <p>This cuts both ways: the page can't see your content script's variables either, and if the page redefines something like <code>window.confirm</code>, your content script still sees the browser's real, original version — not the page's tampered one. It's a safety boundary, not a bug.</p>
+
+  <p>One more consequence: reloading or navigating the page re-injects the content script from scratch. Nothing in its top-level scope survives — treat it as stateless, and persist anything that matters via <code>storage</code> or a message to the background script.</p>
+
+  <h2>What a content script gets for free</h2>
+
+  <p>Unlike a popup, options page, or background script, a content script does <em>not</em> get the full WebExtensions API surface. It gets a short, fixed allowlist directly — <code>storage</code> (full access), plus slices of <code>runtime</code> (<code>sendMessage</code>, <code>connect</code>, <code>getURL</code>, …) and <code>i18n</code>. Everything else — <code>tabs</code>, <code>notifications</code>, <code>cookies</code>, <code>bookmarks</code>, all of it — is off-limits directly. To use any of those, the content script has to message the background script and have <em>it</em> make the call.<sup class="cite"><a href="#fn2">[2]</a></sup></p>
+
+  <p>Worth flagging against <a href="../learning-records/0001-settings-roundtrip-built-correctly.md">last lesson's habit</a>: <code>storage</code> is directly usable from a content script, exactly like from the popup or options page. Messaging isn't a mandatory funnel for state — it's specifically for the APIs a content script can't reach on its own.</p>
+
+  <h2>Registering one</h2>
+
+  <pre><code>"content_scripts": [
+  {
+    "matches": ["*://*.mozilla.org/*"],
+    "js": ["content-script.js"],
+    "run_at": "document_idle"
+  }
+]</code></pre>
+
+  <p><code>matches</code> is a list of URL patterns — the content script only injects on pages that match. Unlike programmatic injection (<code>scripting.executeScript()</code>), a script declared this way in the manifest needs no separate <code>host_permissions</code> entry: <code>matches</code> <em>is</em> the grant.<sup class="cite"><a href="#fn3">[3]</a></sup> Full key reference in the <a href="../reference/content-scripts-cheatsheet.html">cheat sheet</a>.</p>
+
+  <hr class="rule">
+
+  <h2>Build it: link-click-logger</h2>
+
+  <p>Starter scaffold at <code>experiments/0003-link-click-logger/</code>: a content script that watches for link clicks on <em>any</em> page, a background script that tallies them in storage, and a popup that shows the running count. Same shape as Lesson 2's round trip, one new leg added on the front.</p>
+
+  <h3>TODO 0 — manifest.json</h3>
+  <p>Add a <code>content_scripts</code> entry that matches every page and runs <code>content-script.js</code> once the page has mostly settled.</p>
+  <details>
+    <summary>Reveal</summary>
+    <pre><code>"content_scripts": [
+  {
+    "matches": ["*://*/*"],
+    "js": ["content-script.js"],
+    "run_at": "document_idle"
+  }
+]</code></pre>
+  </details>
+
+  <h3>TODO 1 — content-script.js</h3>
+  <p>Listen for clicks anywhere on the page. When the click lands on (or inside) an <code>&lt;a&gt;</code>, message the background script with the link's URL.</p>
+  <details>
+    <summary>Reveal</summary>
+    <pre><code>document.addEventListener("click", (e) => {
+  const link = e.target.closest("a");
+  if (!link) return;
+  browser.runtime.sendMessage({ type: "link-clicked", url: link.href });
+});</code></pre>
+  </details>
+
+  <h3>TODO 2 — background.js</h3>
+  <p>Listen for those messages; keep a running count and the last URL in <code>storage.sync</code>.</p>
+  <details>
+    <summary>Reveal</summary>
+    <pre><code>browser.runtime.onMessage.addListener(async (message) => {
+  if (message.type === "link-clicked") {
+    const { linksClicked = 0 } = await browser.storage.sync.get("linksClicked");
+    await browser.storage.sync.set({
+      linksClicked: linksClicked + 1,
+      lastUrl: message.url,
+    });
+  }
+});</code></pre>
+  </details>
+
+  <h3>TODO 3 — popup/popup.js</h3>
+  <p>Read the count and last URL straight from <code>storage.sync</code> — no messaging needed here.</p>
+  <details>
+    <summary>Reveal</summary>
+    <pre><code>document.addEventListener("DOMContentLoaded", async () => {
+  const { linksClicked = 0, lastUrl = "—" } =
+    await browser.storage.sync.get(["linksClicked", "lastUrl"]);
+  document.getElementById("count").textContent = linksClicked;
+  document.getElementById("last-url").textContent = lastUrl;
+});</code></pre>
+  </details>
+
+  <h3>Run it</h3>
+  <ol>
+    <li><code>about:debugging#/runtime/this-firefox</code> → <strong>Load Temporary Add-on…</strong> → select <code>experiments/0003-link-click-logger/manifest.json</code>.</li>
+    <li>Go to any ordinary site (not <code>addons.mozilla.org</code> or an <code>about:</code> page — content scripts can't run there) and click a few links.</li>
+    <li>Open the popup — the count should reflect your clicks, even across different sites, since storage is shared extension-wide.</li>
+    <li>In <code>about:debugging</code>, click <strong>Inspect</strong> next to the extension to open a console on the page itself and watch the content script's messages fire live.</li>
+  </ol>
+
+  <hr class="rule">
+
+  <h2>Check your recall</h2>
+
+  <div class="quiz-set">
+
+    <div class="quiz" data-answer="a"
+      data-feedback-correct="Right — storage is on the content script's direct-access allowlist."
+      data-feedback-incorrect="Not quite — storage is one of the few APIs a content script can use directly, no messaging required.">
+      <p class="quiz-progress"></p>
+      <p class="quiz-prompt">A content script wants to call <code>browser.storage.sync.set()</code>. Does it need to message the background script first?</p>
+      <ul class="quiz-options">
+        <li><button class="quiz-option" data-choice="a">No, it's directly available</button></li>
+        <li><button class="quiz-option" data-choice="b">Yes, always message first</button></li>
+        <li><button class="quiz-option" data-choice="c">No, but reads only</button></li>
+        <li><button class="quiz-option" data-choice="d">Yes, but writes only</button></li>
+      </ul>
+      <p class="quiz-feedback" aria-live="polite"></p>
+    </div>
+
+    <div class="quiz" data-answer="b"
+      data-feedback-correct="Right — tabs isn't on the content script's allowlist, so this has to go through the background script."
+      data-feedback-incorrect="Not quite — tabs is not directly available to a content script; it has to message the background script to use it.">
+      <p class="quiz-progress"></p>
+      <p class="quiz-prompt">A content script wants to call <code>browser.tabs.query()</code>. Does it need to message the background script first?</p>
+      <ul class="quiz-options">
+        <li><button class="quiz-option" data-choice="a">No, it's directly available</button></li>
+        <li><button class="quiz-option" data-choice="b">Yes, message the background</button></li>
+        <li><button class="quiz-option" data-choice="c">No, but reads only</button></li>
+        <li><button class="quiz-option" data-choice="d">Yes, but writes only</button></li>
+      </ul>
+      <p class="quiz-feedback" aria-live="polite"></p>
+    </div>
+
+    <div class="quiz" data-answer="b"
+      data-feedback-correct="Right — navigation re-injects the content script from scratch; nothing in its top-level scope survives."
+      data-feedback-incorrect="Not quite — a content script is re-injected fresh on every page load, so top-level state doesn't survive navigation.">
+      <p class="quiz-progress"></p>
+      <p class="quiz-prompt">Your content script sets a top-level <code>let count = 0</code>. The user clicks a link and navigates to a new page on the same site. What's <code>count</code> now?</p>
+      <ul class="quiz-options">
+        <li><button class="quiz-option" data-choice="a">Still whatever it was</button></li>
+        <li><button class="quiz-option" data-choice="b">Back to 0, fresh script</button></li>
+        <li><button class="quiz-option" data-choice="c">Still whatever, Firefox only</button></li>
+        <li><button class="quiz-option" data-choice="d">Undefined, a thrown error</button></li>
+      </ul>
+      <p class="quiz-feedback" aria-live="polite"></p>
+    </div>
+
+    <div class="quiz" data-answer="a"
+      data-feedback-correct="Right — the two worlds don't share variables, even though they share the same DOM."
+      data-feedback-incorrect="Not quite — the content script's world can't see variables the page script defined, even on the same page.">
+      <p class="quiz-progress"></p>
+      <p class="quiz-prompt">Page script runs <code>window.foo = "from page"</code>. Your content script then runs <code>console.log(window.foo)</code>. What logs?</p>
+      <ul class="quiz-options">
+        <li><button class="quiz-option" data-choice="a"><code>undefined</code></button></li>
+        <li><button class="quiz-option" data-choice="b"><code>"from page"</code></button></li>
+        <li><button class="quiz-option" data-choice="c">A thrown <code>TypeError</code></button></li>
+        <li><button class="quiz-option" data-choice="d"><code>null</code></button></li>
+      </ul>
+      <p class="quiz-feedback" aria-live="polite"></p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </div>
+
+  <p class="crosslinks">Next: <a href="./0004-talking-to-external-servers.html">Lesson 4 — Talking to external servers</a>.</p>
+
+  <h2>Back to shuff</h2>
+  <p>This closes out the anatomy map from Lesson 1 — every component in that diagram now has something real built with it. shuff still has none of these; whenever it needs to read or change something on the actual page the user is looking at (not just its own popup), a content script declared like today's <code>TODO 0</code> is the component for that job.</p>
+
+  <div class="ask-agent">
+    <strong>Stuck, or want to go deeper?</strong> Ask your agent. Good next questions: "when would I use connection-based messaging (<code>runtime.connect</code>) instead of <code>sendMessage</code>?", "how do I talk to a page's own scripts, not just the background script?", or "walk me through giving shuff its first content script."
+  </div>
+
+  <hr class="rule">
+
+  <div class="sources">
+    <p><strong>Notes &amp; sources</strong></p>
+    <ol>
+      <li id="fn1">MDN, <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Content_scripts">Content scripts</a> — isolated world, DOM sharing without JS sharing.</li>
+      <li id="fn2">MDN, <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Content_scripts#webextension_apis">Content scripts — WebExtension APIs</a> — the direct-access allowlist (<code>storage</code> in full, slices of <code>runtime</code>/<code>i18n</code>/<code>extension</code>).</li>
+      <li id="fn3">MDN, <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Content_scripts#permissions">Content scripts — permissions</a> — statically declared <code>matches</code> is itself the grant.</li>
+    </ol>
+  </div>
+
+</main>
+<script src="../assets/quiz.js"></script>
+</body>
+</html>

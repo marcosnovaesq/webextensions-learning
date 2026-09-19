@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 4 — Talking to External Servers</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main class="page">
+
+  <p class="eyebrow">Lesson 4 · WebExtensions</p>
+  <h1>Talking to External Servers</h1>
+  <p class="dek">Every component from <a href="./0001-anatomy-of-a-webextension.html">Lesson 1's map</a> is now built with something real — but none of it has left the browser yet. Most extensions that do anything useful eventually call an outside API, and an extension's relationship to that outside world is genuinely different from a normal webpage's. Today: where a network call is allowed to be privileged, where it isn't, and a fetch that actually leaves the machine.</p>
+
+  <div class="crosslinks">
+    <a href="../MISSION.md">Mission</a>
+    <a href="./0003-content-scripts.html">Lesson 3</a>
+    <a href="../reference/external-requests-cheatsheet.html">Reference: External requests cheat sheet</a>
+  </div>
+
+  <blockquote class="definition">
+    <p><strong>Primary sources for this lesson:</strong>
+    <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/host_permissions">host_permissions</a> ·
+    <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Content_scripts#xhr_and_fetch">Content scripts — XHR and fetch</a> ·
+    <a href="https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch">Using Fetch</a> — all on MDN.</p>
+  </blockquote>
+
+  <h2>Four facts worth knowing before you build</h2>
+
+  <blockquote class="definition">
+    <p><strong>A background or extension-page fetch to a host in <code>host_permissions</code> is unrestricted — no CORS involved at all.</strong> MDN states it plainly: those APIs get "access to those origins without cross-origin restrictions."<sup class="cite"><a href="#fn1">[1]</a></sup> That's a different mechanism from a webpage's own <code>fetch()</code>, which only works cross-origin if the <em>server</em> opts in with CORS headers. Here, the <em>browser</em> grants the access instead, based on a permission the user approved — the server's own headers don't come into it.</p>
+  </blockquote>
+
+  <blockquote class="definition">
+    <p><strong>That privilege does not reach content scripts.</strong> As of Manifest V3 (Firefox 101+, Chrome 73+), a content script's <code>fetch()</code> is subject to the exact same CORS policy as the page it's injected into — <code>host_permissions</code> only works in extension pages (background, popup, options), not content scripts.<sup class="cite"><a href="#fn2">[2]</a></sup> Practical rule: put outbound API calls in the background script, not a content script, the same way <a href="../reference/content-scripts-cheatsheet.html">Lesson 3</a> put <code>tabs</code> calls there.</p>
+  </blockquote>
+
+  <blockquote class="definition">
+    <p><strong><code>fetch()</code> only rejects its promise on a network-level failure</strong> — offline, DNS failure, a bad scheme. An HTTP error status like <code>404</code> or <code>500</code> still resolves the promise with a normal <code>Response</code> object. You have to check <code>response.ok</code> (or <code>.status</code>) yourself and throw explicitly, or a <code>try</code>/<code>catch</code> around the fetch will silently never catch the failure.<sup class="cite"><a href="#fn3">[3]</a></sup></p>
+  </blockquote>
+
+  <blockquote class="definition">
+    <p><strong><code>storage.local</code> and <code>storage.sync</code> are not a credentials vault.</strong> They're plain browser storage, offering the same protection as the rest of the browser profile — fine for caching a public API's response, but worth being deliberate about before putting a real user's API token or password there.</p>
+  </blockquote>
+
+  <hr class="rule">
+
+  <h2>Build it: advice-fetcher</h2>
+
+  <p>Starter scaffold at <code>experiments/0004-advice-fetcher/</code>: a popup with a button, and a background script that fetches a random line of advice from a small public API (<a href="https://api.adviceslip.com/">api.adviceslip.com</a>, no key required). Same shape as before — message out from the popup, do the privileged work in the background, message the result back.</p>
+
+  <h3>TODO 0 — manifest.json</h3>
+  <p>Add a <code>host_permissions</code> entry for <code>api.adviceslip.com</code>, so the background script's fetch to it is unrestricted. There's also a trivial local server at <code>server.js</code> (run with <code>node server.js</code>) serving the same response shape at <code>localhost:8787</code>, with a <code>/advice/broken</code> endpoint that always 500s — useful later for testing the error path on demand instead of temporarily breaking the real URL. Grant both now so either target works.</p>
+  <details>
+    <summary>Reveal</summary>
+    <pre><code>"host_permissions": [
+  "https://api.adviceslip.com/*",
+  "http://localhost:8787/*"
+]</code></pre>
+  </details>
+
+  <h3>TODO 1 — background.js</h3>
+  <p>Listen for a <code>{ type: "get-advice" }</code> message. Fetch <code>https://api.adviceslip.com/advice</code>, check <code>response.ok</code> before trusting the body, parse the JSON, and return the advice text (the response shape is <code>{ slip: { advice: "..." } }</code>). If anything goes wrong, throw — a thrown error in a message listener becomes a rejected promise for whoever sent the message.</p>
+  <details>
+    <summary>Reveal</summary>
+    <pre><code>browser.runtime.onMessage.addListener(async (message) => {
+  if (message.type === "get-advice") {
+    const response = await fetch("https://api.adviceslip.com/advice");
+    if (!response.ok) {
+      throw new Error(`Advice API responded with ${response.status}`);
+    }
+    const data = await response.json();
+    return data.slip.advice;
+  }
+});</code></pre>
+  </details>
+
+  <h3>TODO 2 — popup/popup.js</h3>
+  <p>On button click, message the background script and show the result. Wrap it so a rejected promise (the throw above) shows an error message instead of leaving the popup stuck on "Loading…".</p>
+  <details>
+    <summary>Reveal</summary>
+    <pre><code>document.getElementById("get-advice").addEventListener("click", async () => {
+  const out = document.getElementById("advice");
+  out.textContent = "Loading…";
+  try {
+    out.textContent = await browser.runtime.sendMessage({ type: "get-advice" });
+  } catch (error) {
+    out.textContent = `Couldn't fetch advice: ${error.message}`;
+  }
+});</code></pre>
+  </details>
+
+  <h3>Run it</h3>
+  <ol>
+    <li><code>about:debugging#/runtime/this-firefox</code> → <strong>Load Temporary Add-on…</strong> → select <code>experiments/0004-advice-fetcher/manifest.json</code>.</li>
+    <li>Open the popup, click the button a few times — you should see a new line of advice each time.</li>
+    <li>To see the error path fire, on demand and repeatably: run <code>node server.js</code> in a terminal, change <code>background.js</code>'s fetch URL to <code>http://localhost:8787/advice/broken</code> (always a 500), reload the extension in <code>about:debugging</code>, and click the button again. You should see the error message, not a stuck "Loading…". Point the URL at <code>http://localhost:8787/advice</code> to see the happy path against the local server instead, or back at the real API when you're done.</li>
+    <li>In <code>about:debugging</code>, click <strong>Inspect</strong> next to the extension to open a console on the background script and watch the fetch happen.</li>
+  </ol>
+
+  <hr class="rule">
+
+  <h2>Beyond this lesson: when the API needs to know <em>who</em> you are</h2>
+  <p>Everything above assumes a public, unauthenticated API. The moment an extension needs to act as a specific logged-in user against a service like Google or GitHub, that's an OAuth2 flow, and the relevant piece is the <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/identity">identity API</a> — <code>identity.launchWebAuthFlow()</code> opens the provider's login/consent screen and hands back a token, using <code>identity.getRedirectURL()</code> as the callback address. Not built hands-on today (it's a bigger surface, with real per-provider differences and a Firefox/Chrome redirect-URL split worth its own lesson) — flagged here so the vocabulary is there when shuff or something else needs it.</p>
+
+  <hr class="rule">
+
+  <h2>Check your recall</h2>
+
+  <div class="quiz-set">
+
+    <div class="quiz" data-answer="b"
+      data-feedback-correct="Right — host_permissions is itself the grant; the extension doesn't need the server's cooperation."
+      data-feedback-incorrect="Not quite — host_permissions grants the access directly. The server's own CORS headers aren't involved.">
+      <p class="quiz-progress"></p>
+      <p class="quiz-prompt">Your background script has <code>"https://api.example.com/*"</code> in <code>host_permissions</code>. Does the fetch also need the server to send CORS headers?</p>
+      <ul class="quiz-options">
+        <li><button class="quiz-option" data-choice="a">Yes, always required too</button></li>
+        <li><button class="quiz-option" data-choice="b">No, the permission is enough</button></li>
+        <li><button class="quiz-option" data-choice="c">No, but only for GET calls</button></li>
+        <li><button class="quiz-option" data-choice="d">Yes, but only the first time</button></li>
+      </ul>
+      <p class="quiz-feedback" aria-live="polite"></p>
+    </div>
+
+    <div class="quiz" data-answer="c"
+      data-feedback-correct="Right — in MV3, content scripts follow the host page's own CORS policy; the privilege only applies in extension pages."
+      data-feedback-incorrect="Not quite — as of MV3, content scripts are subject to the page's own CORS policy. host_permissions doesn't reach them.">
+      <p class="quiz-progress"></p>
+      <p class="quiz-prompt">Same <code>host_permissions</code> entry, but the fetch is made from a content script instead of the background script. Does it get the same unrestricted access?</p>
+      <ul class="quiz-options">
+        <li><button class="quiz-option" data-choice="a">Yes, identical privilege there</button></li>
+        <li><button class="quiz-option" data-choice="b">Yes, but only for JSON</button></li>
+        <li><button class="quiz-option" data-choice="c">No, it follows page CORS</button></li>
+        <li><button class="quiz-option" data-choice="d">No, it always fails outright</button></li>
+      </ul>
+      <p class="quiz-feedback" aria-live="polite"></p>
+    </div>
+
+    <div class="quiz" data-answer="d"
+      data-feedback-correct="Right — fetch only rejects on network failure. An HTTP error status still resolves with a Response, so you must check response.ok yourself."
+      data-feedback-incorrect="Not quite — fetch's promise resolves normally on a 500; it only rejects on a network-level failure. Check response.ok explicitly.">
+      <p class="quiz-progress"></p>
+      <p class="quiz-prompt">A <code>fetch()</code> call reaches the server fine, but the server responds with a <code>500</code>. What happens to the returned promise?</p>
+      <ul class="quiz-options">
+        <li><button class="quiz-option" data-choice="a">It rejects right away</button></li>
+        <li><button class="quiz-option" data-choice="b">It hangs until timeout</button></li>
+        <li><button class="quiz-option" data-choice="c">It throws a syntax error</button></li>
+        <li><button class="quiz-option" data-choice="d">It resolves, ok is false</button></li>
+      </ul>
+      <p class="quiz-feedback" aria-live="polite"></p>
+    </div>
+
+    <div class="quiz" data-answer="a"
+      data-feedback-correct="Right — storage.local/sync carry the same protection as the rest of the browser profile, not encrypted-vault-grade protection."
+      data-feedback-incorrect="Not quite — storage APIs aren't an encrypted vault; treat them as ordinary browser-profile data, not credential-grade storage.">
+      <p class="quiz-progress"></p>
+      <p class="quiz-prompt">Your extension needs to remember a real user's API token long-term. What's true about storing it in <code>storage.local</code>?</p>
+      <ul class="quiz-options">
+        <li><button class="quiz-option" data-choice="a">Only as safe as the profile</button></li>
+        <li><button class="quiz-option" data-choice="b">Encrypted at rest, always safe</button></li>
+        <li><button class="quiz-option" data-choice="c">Synced to Mozilla's own servers</button></li>
+        <li><button class="quiz-option" data-choice="d">Readable by any open tab</button></li>
+      </ul>
+      <p class="quiz-feedback" aria-live="polite"></p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </div>
+
+  <h2>Back to shuff</h2>
+  <p>shuff hasn't needed an external server yet, but the moment it does — checking a URL against a blocklist API, syncing settings to something other than <code>storage.sync</code>, anything — this is the shape: <code>host_permissions</code> for the domain, the fetch itself in the background script, and a <code>response.ok</code> check standing between "it works on the happy path" and "it works."</p>
+
+  <div class="ask-agent">
+    <strong>Stuck, or want to go deeper?</strong> Ask your agent. Good next questions: "walk me through an OAuth2 flow with identity.launchWebAuthFlow()", "how would I add retry-with-backoff to this fetch?", or "what changes if the API needs an API key in a header instead of being fully public?"
+  </div>
+
+  <hr class="rule">
+
+  <div class="sources">
+    <p><strong>Notes &amp; sources</strong></p>
+    <ol>
+      <li id="fn1">MDN, <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/host_permissions">host_permissions</a> — grants background/extension-page <code>fetch</code>/<code>XMLHttpRequest</code> access to matching origins without cross-origin restrictions.</li>
+      <li id="fn2">MDN, <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Content_scripts#xhr_and_fetch">Content scripts — XHR and fetch</a> — in MV3, content-script requests follow the host page's own CORS policy; the elevated privilege applies only to extension pages.</li>
+      <li id="fn3">MDN, <a href="https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch">Using Fetch</a> — the promise rejects only on network-level failure; an HTTP error status still resolves, so <code>response.ok</code> must be checked explicitly.</li>
+    </ol>
+  </div>
+
+</main>
+<script src="../assets/quiz.js"></script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Link click logger — test page</title>
+<style>
+  body { font: 16px sans-serif; max-width: 32rem; margin: 3rem auto; line-height: 1.6; }
+  li { margin-bottom: 0.5rem; }
+  .icon-link { display: inline-flex; align-items: center; gap: 0.4rem; }
+</style>
+</head>
+<body>
+  <h1>Test links</h1>
+  <p>Load the extension via <code>about:debugging</code>, open this file, then click a few of these and check the popup.</p>
+
+  <ul>
+    <li><a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions">Plain link — MDN WebExtensions</a></li>
+    <li><a href="https://example.com">Plain link — example.com</a></li>
+    <li>
+      <a href="https://example.org" class="icon-link">
+        <span>📎</span><span>Link with a nested &lt;span&gt; inside the &lt;a&gt;</span>
+      </a>
+      <!-- clicking the span/emoji should still count — tests Element.closest("a") -->
+    </li>
+    <li><a href="#nowhere">Same-page anchor link</a></li>
+    <li><a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Content_scripts" target="_blank">Opens in a new tab</a></li>
+  </ul>
+
+  <p>Not a link: <button type="button" onclick="alert('not a link, should not count')">Just a button</button></p>
+</body>
+</html>

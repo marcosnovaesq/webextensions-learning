@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 1 — Anatomy of a WebExtension</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  .diagram { width: 100%; height: auto; margin: 1.5rem 0 0.5rem; }
+  .diagram text { font-family: var(--font-sans); fill: var(--ink); }
+  .diagram .hub rect { fill: var(--accent); }
+  .diagram .hub text { fill: var(--bg); font-weight: 600; }
+  .diagram .node rect { fill: var(--bg-raised); stroke: var(--rule); }
+  .diagram .spoke { stroke: var(--rule); stroke-width: 1.5; }
+  .diagram-caption { font-family: var(--font-sans); font-size: 0.8rem; color: var(--ink-soft); text-align: center; margin-top: 0.3rem; }
+</style>
+</head>
+<body>
+<main class="page">
+
+  <p class="eyebrow">Lesson 1 · WebExtensions</p>
+  <h1>The Anatomy of a WebExtension</h1>
+  <p class="dek">Every extension, no matter how small, is built from the same short list of parts. Learn the parts and the map, and any extension's codebase — including <a href="../../shuff/shuff-browser/manifest.json">shuff's</a> — stops being a pile of files and becomes something you can navigate.</p>
+
+  <div class="crosslinks">
+    <a href="../MISSION.md">Mission</a>
+    <a href="../reference/webextension-anatomy-glossary.html">Reference: Glossary</a>
+    <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Anatomy_of_a_WebExtension">Primary source: MDN</a>
+  </div>
+
+  <blockquote class="definition">
+    <p><strong>Primary source for this lesson:</strong> <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Anatomy_of_a_WebExtension">MDN — Anatomy of a WebExtension</a>. Everything below is a compressed, quizzed version of that page — read the original when you want the full detail.</p>
+  </blockquote>
+
+  <p>An extension is just a folder of files, packaged up for installation. There's no framework, no build step required, no runtime magic — the browser reads a folder and does what it's told.<sup class="cite" id="fn1-back"><a href="#fn1">[1]</a></sup> Almost everything in that folder is optional. Exactly one file is not.</p>
+
+  <h2>The one required file</h2>
+
+  <p>Every extension has a <code>manifest.json</code> — and nothing else is mandatory. It carries basic metadata (name, version) and, more importantly, it's the <em>hub</em>: every other component gets wired in by pointing to it from the manifest.<sup class="cite"><a href="#fn1">[1]</a></sup></p>
+
+  <svg class="diagram" viewBox="0 0 640 340" xmlns="http://www.w3.org/2000/svg">
+    <style>
+      .diagram-svg text { font-size: 13px; }
+    </style>
+    <g class="diagram-svg">
+      <line class="spoke" x1="320" y1="170" x2="320" y2="40"/>
+      <line class="spoke" x1="320" y1="170" x2="560" y2="90"/>
+      <line class="spoke" x1="320" y1="170" x2="560" y2="250"/>
+      <line class="spoke" x1="320" y1="170" x2="320" y2="300"/>
+      <line class="spoke" x1="320" y1="170" x2="80" y2="250"/>
+      <line class="spoke" x1="320" y1="170" x2="80" y2="90"/>
+
+      <g class="node"><rect x="250" y="10" width="140" height="34" rx="6"/><text x="320" y="32" text-anchor="middle">Background script</text></g>
+      <g class="node"><rect x="480" y="65" width="150" height="34" rx="6"/><text x="555" y="87" text-anchor="middle">Popup / Sidebar</text></g>
+      <g class="node"><rect x="480" y="225" width="150" height="34" rx="6"/><text x="555" y="247" text-anchor="middle">Options page</text></g>
+      <g class="node"><rect x="250" y="275" width="140" height="34" rx="6"/><text x="320" y="297" text-anchor="middle">Content script</text></g>
+      <g class="node"><rect x="10" y="225" width="150" height="34" rx="6"/><text x="85" y="247" text-anchor="middle">Web accessible resources</text></g>
+      <g class="node"><rect x="10" y="65" width="150" height="34" rx="6"/><text x="85" y="87" text-anchor="middle">Icons</text></g>
+
+      <g class="hub"><rect x="245" y="150" width="150" height="40" rx="6"/><text x="320" y="175" text-anchor="middle">manifest.json</text></g>
+    </g>
+  </svg>
+  <p class="diagram-caption">Everything hangs off manifest.json — nothing on the outside is required.</p>
+
+  <h2>Two worlds: privileged vs. page</h2>
+
+  <p>The components split cleanly into two groups, and the split matters more than any individual name.</p>
+
+  <blockquote class="definition">
+    <p><strong>Privileged (extension) context</strong> — background scripts, popups, sidebars, options pages, and any other "extension page." These get full access to WebExtensions APIs like <code>tabs</code> or <code>storage</code>, gated by what's declared in <code>permissions</code>.<sup class="cite"><a href="#fn2">[2]</a></sup></p>
+  </blockquote>
+
+  <p>All of these are just HTML documents — CSS and JS included, like any web page — referenced from the manifest. A <strong>popup</strong> opens on a toolbar-button click and closes when focus leaves it. A <strong>sidebar</strong> pins into the browser's left pane and survives navigation. An <strong>options page</strong> opens inside the browser's own add-ons manager. Functionally near-identical; the difference is only <em>when and where</em> the browser shows them.<sup class="cite"><a href="#fn3">[3]</a></sup></p>
+
+  <blockquote class="definition">
+    <p><strong>Page context</strong> — content scripts. These run <em>inside</em> a real web page's DOM, in an isolated JS world separate from the page's own scripts. They can read and modify the DOM freely, but only get a small subset of WebExtensions APIs directly — for the rest, they message the background script.<sup class="cite"><a href="#fn4">[4]</a></sup></p>
+  </blockquote>
+
+  <p>One more piece connects the two worlds: <strong>web accessible resources</strong>. An extension's packaged images/CSS/JS aren't reachable from a web page by default — a content script has to explicitly expose them via <code>web_accessible_resources</code> before it can, say, insert a bundled icon into the page.<sup class="cite"><a href="#fn5">[5]</a></sup></p>
+
+  <hr class="rule">
+
+  <h2>Check your recall</h2>
+  <p>Same four answers, four different questions — no formatting clue this time, only the question changes.</p>
+
+  <div class="quiz-set">
+
+    <div class="quiz" data-answer="a"
+      data-feedback-correct="Right — it fires on browser-level events, not page content."
+      data-feedback-incorrect="That's a different component — a background script is the one that listens for browser events independent of any page.">
+      <p class="quiz-progress"></p>
+      <p class="quiz-prompt">Runs independently of any web page, listening for browser events like a new tab opening — which component is this?</p>
+      <ul class="quiz-options">
+        <li><button class="quiz-option" data-choice="a">A background script</button></li>
+        <li><button class="quiz-option" data-choice="b">A content script</button></li>
+        <li><button class="quiz-option" data-choice="c">An options page</button></li>
+        <li><button class="quiz-option" data-choice="d">A toolbar popup</button></li>
+      </ul>
+      <p class="quiz-feedback" aria-live="polite"></p>
+    </div>
+
+    <div class="quiz" data-answer="b"
+      data-feedback-correct="Right — it lives inside the page's DOM, in its own isolated JS world."
+      data-feedback-incorrect="Not quite — the one that runs inside a live page's DOM is the content script.">
+      <p class="quiz-progress"></p>
+      <p class="quiz-prompt">Runs inside the DOM of a live web page, able to read and modify its content — which component is this?</p>
+      <ul class="quiz-options">
+        <li><button class="quiz-option" data-choice="a">A background script</button></li>
+        <li><button class="quiz-option" data-choice="b">A content script</button></li>
+        <li><button class="quiz-option" data-choice="c">An options page</button></li>
+        <li><button class="quiz-option" data-choice="d">A toolbar popup</button></li>
+      </ul>
+      <p class="quiz-feedback" aria-live="polite"></p>
+    </div>
+
+    <div class="quiz" data-answer="c"
+      data-feedback-correct="Right — it's shown inside the browser's native add-ons manager."
+      data-feedback-incorrect="Not quite — the one shown inside the browser's own add-ons manager is the options page.">
+      <p class="quiz-progress"></p>
+      <p class="quiz-prompt">Opens inside the browser's built-in add-ons manager when the user wants to change extension settings — which component is this?</p>
+      <ul class="quiz-options">
+        <li><button class="quiz-option" data-choice="a">A background script</button></li>
+        <li><button class="quiz-option" data-choice="b">A content script</button></li>
+        <li><button class="quiz-option" data-choice="c">An options page</button></li>
+        <li><button class="quiz-option" data-choice="d">A toolbar popup</button></li>
+      </ul>
+      <p class="quiz-feedback" aria-live="polite"></p>
+    </div>
+
+    <div class="quiz" data-answer="d"
+      data-feedback-correct="Right — that open-on-click, close-on-blur behavior is the toolbar popup."
+      data-feedback-incorrect="Not quite — the one that opens on toolbar-button click and closes on blur is the toolbar popup.">
+      <p class="quiz-progress"></p>
+      <p class="quiz-prompt">Opens when the user clicks the extension's toolbar button, and closes again when they click away — which component is this?</p>
+      <ul class="quiz-options">
+        <li><button class="quiz-option" data-choice="a">A background script</button></li>
+        <li><button class="quiz-option" data-choice="b">A content script</button></li>
+        <li><button class="quiz-option" data-choice="c">An options page</button></li>
+        <li><button class="quiz-option" data-choice="d">A toolbar popup</button></li>
+      </ul>
+      <p class="quiz-feedback" aria-live="polite"></p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </div>
+
+  <h2>Apply it: read shuff's manifest</h2>
+
+  <p>shuff's <code>manifest.json</code> (<code>me&amp;dev/shuff/shuff-browser/manifest.json</code>) is only a few lines long right now. Open it, then answer without peeking:</p>
+
+  <ol>
+    <li>Which <em>one</em> component from today's map does shuff currently define?</li>
+    <li>Name three components from the map that shuff does <em>not</em> have yet.</li>
+  </ol>
+
+  <details>
+    <summary>Check your answer</summary>
+    <p>shuff defines an <strong>action popup</strong> only — <code>action.default_popup</code> points at <code>popup/shuff.html</code>, which right now just says "Hello!". There's no <code>background</code> key (no background script), no <code>content_scripts</code>, no <code>options_ui</code>, no <code>icons</code>, and no <code>permissions</code>. Whatever shuff ends up doing, the first real design question will be: does that logic belong in the popup, a background script, or a content script?</p>
+  </details>
+
+  <div class="ask-agent">
+    <strong>Stuck, or want to go deeper?</strong> Ask your agent — it's your teacher for this workspace. Good next questions: "why does Manifest V3 default background scripts to non-persistent?" or "walk me through adding a background script to shuff."
+  </div>
+
+  <hr class="rule">
+
+  <div class="sources">
+    <p><strong>Notes &amp; sources</strong></p>
+    <ol>
+      <li id="fn1">MDN, <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Anatomy_of_a_WebExtension">Anatomy of a WebExtension</a> — manifest.json is the only required file and the hub for every other component. <a href="#fn1-back">↩</a></li>
+      <li id="fn2">MDN, <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/user_interface/Extension_pages">Extension pages</a> — privileged-context pages share full WebExtensions API access.</li>
+      <li id="fn3">MDN, <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/user_interface/Popups">Popups</a>, <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/user_interface/Sidebars">Sidebars</a>, <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/user_interface/Options_pages">Options pages</a>.</li>
+      <li id="fn4">MDN, <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Content_scripts">Content scripts</a> — isolated JS world, subset of APIs, messaging to reach the rest.</li>
+      <li id="fn5">MDN, <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/web_accessible_resources">web_accessible_resources</a>.</li>
+    </ol>
+  </div>
+
+  <p class="crosslinks" style="margin-top:2rem;">Next: <a href="./0002-background-permissions-popup-options.html">Lesson 2 — Background scripts, permissions, popup &amp; options, wired together</a>.</p>
+
+</main>
+<script src="../assets/quiz.js"></script>
+</body>
+</html>

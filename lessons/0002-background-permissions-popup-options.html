@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 2 — Background, Permissions, Popup, Options</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main class="page">
+
+  <p class="eyebrow">Lesson 2 · WebExtensions</p>
+  <h1>Background Scripts, Permissions, Popup &amp; Options — Wired Together</h1>
+  <p class="dek">Four pieces from <a href="./0001-anatomy-of-a-webextension.html">Lesson 1's map</a>, but this time you'll wire them into one working loop: <strong>options page → storage → background script → popup</strong>. That loop — a setting the user changes somewhere, remembered somewhere, and used somewhere else — is one of the most common shapes in real extensions, shuff included.</p>
+
+  <div class="crosslinks">
+    <a href="../MISSION.md">Mission</a>
+    <a href="./0001-anatomy-of-a-webextension.html">Lesson 1</a>
+    <a href="../reference/webextension-anatomy-glossary.html">Reference: Anatomy glossary</a>
+    <a href="../reference/messaging-and-storage-patterns.html">Reference: Messaging &amp; storage patterns</a>
+  </div>
+
+  <blockquote class="definition">
+    <p><strong>Primary sources for this lesson:</strong>
+    <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Background_scripts">Background scripts</a> ·
+    <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/permissions">permissions</a> ·
+    <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/user_interface/Popups">Popups</a> ·
+    <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/user_interface/Options_pages">Options pages</a> — all on MDN.</p>
+  </blockquote>
+
+  <h2>Four facts worth knowing before you build</h2>
+
+  <blockquote class="definition">
+    <p><strong>Background scripts (Manifest V3) are always non-persistent.</strong> They unload after a few seconds idle and reload only when an event fires. Two rules follow: register listeners <em>top-level and synchronously</em> (never inside a callback, or the listener won't survive a reload), and never store state in a plain JS variable — use <code>storage</code> instead, because a global gets wiped every time the script unloads.<sup class="cite"><a href="#fn1">[1]</a></sup></p>
+  </blockquote>
+
+  <blockquote class="definition">
+    <p><strong>Permissions are an array of strings that unlock APIs.</strong> Without <code>"storage"</code> in <code>permissions</code>, calling <code>browser.storage.*</code> fails outright. Manifest V3 splits URL-based access into its own <code>host_permissions</code> key — <code>permissions</code> is now just API names (<code>"storage"</code>, <code>"tabs"</code>, …) and special cases like <code>"activeTab"</code>.<sup class="cite"><a href="#fn2">[2]</a></sup></p>
+  </blockquote>
+
+  <blockquote class="definition">
+    <p><strong>A popup can only be opened by the user clicking the toolbar button</strong> — there's no API to open one from code, and it unloads the instant it loses focus. That's why a popup that needs to "remember" anything has to ask somewhere else (the background script, via storage) every time it opens.<sup class="cite"><a href="#fn3">[3]</a></sup></p>
+  </blockquote>
+
+  <blockquote class="definition">
+    <p><strong>An options page is just another extension page</strong> — declared via <code>options_ui.page</code>, opened by the user through the browser's add-ons manager, or programmatically via <code>browser.runtime.openOptionsPage()</code>. It typically reads and writes settings through <code>storage.sync</code>, the same API the background script and popup use.<sup class="cite"><a href="#fn4">[4]</a></sup></p>
+  </blockquote>
+
+  <hr class="rule">
+
+  <h2>Build it: settings-roundtrip</h2>
+
+  <p>A starter scaffold is waiting at <code>experiments/0002-settings-roundtrip/</code>. It's a popup that shows a greeting, and an options page where you set that greeting — five gaps (marked <code>TODO</code>) stand between "loads" and "actually works." Fill them in using the facts above and the snippets in the <a href="../reference/messaging-and-storage-patterns.html">messaging &amp; storage reference</a> — try each one from memory before revealing.</p>
+
+  <h3>TODO 0 — manifest.json</h3>
+  <p>The starter manifest only declares the popup. Add three keys: <code>permissions</code> (so <code>storage</code> works), <code>background</code> (MV3 shape — a module-type script), and <code>options_ui</code> (pointing at <code>options/options.html</code>).</p>
+  <details>
+    <summary>Reveal</summary>
+    <pre><code>"permissions": ["storage"],
+"background": {
+  "scripts": ["background.js"],
+  "type": "module"
+},
+"options_ui": {
+  "page": "options/options.html",
+  "open_in_tab": true
+}</code></pre>
+  </details>
+
+  <h3>TODO 1 — background.js</h3>
+  <p>Listen for a <code>{ type: "get-greeting" }</code> message; respond with the saved greeting from <code>storage.sync</code> (default <code>"Hello!"</code>).</p>
+  <details>
+    <summary>Reveal</summary>
+    <pre><code>browser.runtime.onMessage.addListener((message) => {
+  if (message.type === "get-greeting") {
+    return browser.storage.sync
+      .get({ greeting: "Hello!" })
+      .then((items) => items.greeting);
+  }
+});</code></pre>
+  </details>
+
+  <h3>TODO 2 &amp; 3 — popup/popup.js</h3>
+  <p>On load, ask the background script for the greeting and display it. On button click, open the options page.</p>
+  <details>
+    <summary>Reveal</summary>
+    <pre><code>document.addEventListener("DOMContentLoaded", async () => {
+  const greeting = await browser.runtime.sendMessage({ type: "get-greeting" });
+  document.getElementById("greeting").textContent = greeting;
+});
+
+document.getElementById("open-options").addEventListener("click", () => {
+  browser.runtime.openOptionsPage();
+});</code></pre>
+  </details>
+
+  <h3>TODO 4 &amp; 5 — options/options.js</h3>
+  <p>On load, fill the input from storage. On submit, save the input's value.</p>
+  <details>
+    <summary>Reveal</summary>
+    <pre><code>document.addEventListener("DOMContentLoaded", async () => {
+  const { greeting } = await browser.storage.sync.get({ greeting: "Hello!" });
+  input.value = greeting;
+});
+
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await browser.storage.sync.set({ greeting: input.value });
+});</code></pre>
+  </details>
+
+  <h3>Run it</h3>
+  <ol>
+    <li>Open Firefox, go to <code>about:debugging#/runtime/this-firefox</code>.</li>
+    <li>Click <strong>Load Temporary Add-on…</strong> and select <code>experiments/0002-settings-roundtrip/manifest.json</code>.</li>
+    <li>Click the extension's toolbar icon. It should show <code>Hello!</code>.</li>
+    <li>Click <strong>Change greeting</strong>, type something new, hit Save.</li>
+    <li>Reopen the popup — it should show your new greeting. That round trip (options → storage → background → popup) is the whole lesson.</li>
+  </ol>
+  <p>If it doesn't work: <code>about:debugging</code> has an <strong>Inspect</strong> link for the background script and the popup — use it, check the console for errors, and compare against the reveals above line by line.</p>
+
+  <hr class="rule">
+
+  <h2>Check your recall</h2>
+
+  <div class="quiz-set">
+
+    <div class="quiz" data-answer="b"
+      data-feedback-correct="Right — a global variable gets wiped every time the non-persistent script unloads."
+      data-feedback-incorrect="Not quite — a plain JS variable is wiped whenever the background script unloads. Storage survives that.">
+      <p class="quiz-progress"></p>
+      <p class="quiz-prompt">A Manifest V3 background script needs to remember a counter between events. What should it use?</p>
+      <ul class="quiz-options">
+        <li><button class="quiz-option" data-choice="a">A top-level <code>let</code> variable</button></li>
+        <li><button class="quiz-option" data-choice="b">The <code>storage</code> API</button></li>
+        <li><button class="quiz-option" data-choice="c">A <code>setTimeout</code> closure</button></li>
+        <li><button class="quiz-option" data-choice="d">A global <code>window</code> property</button></li>
+      </ul>
+      <p class="quiz-feedback" aria-live="polite"></p>
+    </div>
+
+    <div class="quiz" data-answer="a"
+      data-feedback-correct="Right — register it synchronously at the top level so it survives an unload/reload."
+      data-feedback-incorrect="Not quite — a listener added inside a callback (like window.onload) won't persist across an event-page reload.">
+      <p class="quiz-progress"></p>
+      <p class="quiz-prompt">Where must a background script register a <code>browser.runtime.onMessage</code> listener for it to keep working after the script unloads and reloads?</p>
+      <ul class="quiz-options">
+        <li><button class="quiz-option" data-choice="a">Top-level, synchronously</button></li>
+        <li><button class="quiz-option" data-choice="b">Inside <code>window.onload</code></button></li>
+        <li><button class="quiz-option" data-choice="c">Inside an <code>async</code> IIFE</button></li>
+        <li><button class="quiz-option" data-choice="d">Inside another listener</button></li>
+      </ul>
+      <p class="quiz-feedback" aria-live="polite"></p>
+    </div>
+
+    <div class="quiz" data-answer="c"
+      data-feedback-correct="Right — a popup only ever opens from a direct user click on the toolbar button."
+      data-feedback-incorrect="Not quite — there is no API call that opens a popup; it only opens from a user's toolbar-button click.">
+      <p class="quiz-progress"></p>
+      <p class="quiz-prompt">Your background script wants to show the popup after a timer fires. How does it do that?</p>
+      <ul class="quiz-options">
+        <li><button class="quiz-option" data-choice="a"><code>action.openPopup()</code></button></li>
+        <li><button class="quiz-option" data-choice="b"><code>runtime.openPopup()</code></button></li>
+        <li><button class="quiz-option" data-choice="c">It can't — only a user click opens it</button></li>
+        <li><button class="quiz-option" data-choice="d"><code>tabs.openPopup()</code></button></li>
+      </ul>
+      <p class="quiz-feedback" aria-live="polite"></p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </div>
+
+  <p class="crosslinks">Next: <a href="./0003-content-scripts.html">Lesson 3 — Content scripts</a>.</p>
+
+  <h2>Back to shuff</h2>
+  <p>shuff's manifest still has no <code>background</code>, no <code>permissions</code>, no <code>options_ui</code> — this loop is the smallest real version of what adding any of them looks like. When shuff needs a setting (a duration, a list of blocked sites, anything), this is the shape: options page writes it, background script (or a content script, via messaging) reads it, popup reflects it.</p>
+
+  <div class="ask-agent">
+    <strong>Stuck, or want to go deeper?</strong> Ask your agent. Good next questions: "why does Firefox let onMessage return a Promise but Chrome usually doesn't?", "what's the difference between storage.sync and storage.local?", or "walk me through giving shuff a real options page."
+  </div>
+
+  <hr class="rule">
+
+  <div class="sources">
+    <p><strong>Notes &amp; sources</strong></p>
+    <ol>
+      <li id="fn1">MDN, <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Background_scripts">Background scripts</a> — MV3 supports only non-persistent scripts; listeners must be registered synchronously at the top level; use storage instead of globals.</li>
+      <li id="fn2">MDN, <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/permissions">permissions</a> — API permissions vs. host permissions; MV3 moved host access to <code>host_permissions</code>.</li>
+      <li id="fn3">MDN, <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/user_interface/Popups">Popups</a> — cannot be opened programmatically; closes when it loses focus.</li>
+      <li id="fn4">MDN, <a href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/user_interface/Options_pages">Options pages</a> — <code>options_ui.page</code>, <code>runtime.openOptionsPage()</code>, typical use of <code>storage</code>.</li>
+    </ol>
+  </div>
+
+</main>
+<script src="../assets/quiz.js"></script>
+</body>
+</html>
